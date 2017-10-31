@@ -1,0 +1,63 @@
+variables:
+  rails_version: '5.1.4'
+  nokogiri_version: '1.8.1'
+  cityhash_version: '0.9.0'
+  bcrypt_version: '3.1.11'
+  graphql_version: '1.1.0'
+  oj_version: '3.3.9'
+  pg_version: '0.21'
+
+builders:
+  - type: docker
+    image: frolvlad/alpine-bash
+    commit: true
+    author: nate@juliabalfour.com
+    changes:
+      - 'CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/supervisor.conf"]'
+      - 'EXPOSE 80 443'
+
+provisioners:
+  - type: shell
+    inline:
+      - 'apk update'
+      - 'apk add --virtual build-dependencies postgresql-dev libc-dev linux-headers build-base ruby-dev libxml2-dev libxslt-dev'
+      - 'apk add --virtual lgp-dependencies cmake python2 flex bison'
+      - 'apk add --update bash grep nginx git ruby ruby-rake ruby-bigdecimal ruby-bundler ruby-json'
+      - 'apk add --update postgresql-client ca-certificates libressl libstdc++ libxml2 supervisor'
+      - 'echo "gem: --no-document --no-rdoc --no-ri" >> ~/.gemrc'
+      - 'cp ~/.gemrc /etc/gemrc && chmod uog+r /etc/gemrc'
+      - 'git clone https://github.com/graphql/libgraphqlparser.git /tmp/lgp'
+      - 'cd /tmp/lgp'
+      - 'cmake . && make && make install'
+      - 'rm -rf /tmp/lgp'
+      - 'apk del lgp-dependencies'
+      - 'cd /tmp'
+      - 'gem install nokogiri:{{user `nokogiri_version`}}'
+      - 'gem install rails:{{user `rails_version`}}'
+      - 'gem install pg:{{user `pg_version`}}'
+      - 'gem install cityhash:{{user `cityhash_version`}}'
+      - 'gem install bcrypt:{{user `bcrypt_version`}}'
+      - 'gem install oj:{{user `oj_version`}}'
+      - 'gem install graphql-libgraphqlparser:{{user `graphql_version`}}'
+      - 'apk del build-dependencies'
+      - 'rm -rf /var/cache/apk/*'
+
+  - type: file
+    source: ./supervisor
+    destination: /etc/supervisor
+
+  - type: shell
+    inline:
+      # Generate a random password for the supervisord HTTP process
+      - 'SUPERVISOR_PW="$(LC_CTYPE=C tr -dc A-Za-z0-9 < /dev/urandom | head -c 32 | xargs)"'
+      - 'sed -i "s/!!GENERATED_PW!!/${SUPERVISOR_PW}/g" /etc/supervisor/supervisor.conf'
+
+      - 'mkdir -p /var/log/supervisor'
+      - 'adduser app -D -h /home/app'
+      - 'mkdir -p /run/nginx'
+      - 'chown nginx:nginx /run/nginx'
+
+post-processors:
+  - type: docker-tag
+    repository: nater540/alpine-rails-api
+    tag: latest
