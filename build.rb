@@ -139,6 +139,9 @@ if agree('Tag this release on Github?'.bold)
   create_process('git', 'push', '--tags', attach: false)
 end
 
+# Tag this release with docker
+create_process('docker', 'tag', "#{$docker_user}/#{$docker_image}:latest", "#{$docker_user}/#{$docker_image}:#{$current_version}")
+
 # Push this release to docker hub
 if agree('Push this image to Docker Hub?'.bold)
   create_process('docker', 'push', "#{$docker_user}/#{$docker_image}:latest")
